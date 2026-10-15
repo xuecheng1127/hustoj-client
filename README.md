@@ -9,6 +9,12 @@ as plain Python objects or structured JSON.
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)](#why-zero-dependencies)
+[![tests](https://github.com/xuecheng1127/hustoj-client/actions/workflows/tests.yml/badge.svg)](https://github.com/xuecheng1127/hustoj-client/actions/workflows/tests.yml)
+
+![Offline demo: parsing a HUSTOJ contest list and problem statement](docs/demo.png)
+
+*Fully offline: `python examples/demo_parse.py` parses the bundled fixtures and prints
+everything the client extracts. No judge or network access needed.*
 
 ---
 
@@ -66,13 +72,28 @@ python -m hustoj_client check --report text
 ```
 
 A first run reports every matching assignment as new and writes them to
-`state.json`. Every later run reports only what appeared since. Use `--report json`
-or `--json-out report.json` for machine-readable output.
+`state.json`. Every later run reports only what appeared since.
 
-To scan without writing any state at all:
+Output formats:
 
 ```bash
-python -m hustoj_client check --state "" --report text
+python -m hustoj_client check --report text       # default, human readable
+python -m hustoj_client check --report markdown   # report-ready Markdown, with links
+python -m hustoj_client check --report json       # machine readable
+python -m hustoj_client check --report json --json-out report.json
+```
+
+Useful variations:
+
+```bash
+# only report what is new: drop the "already seen" list
+python -m hustoj_client check --only-new
+
+# scan without writing any state at all (safe dry run)
+python -m hustoj_client check --state ""
+
+# check a different teacher without touching the config file
+python -m hustoj_client check --teacher "Prof. Smith"
 ```
 
 ## Using it as a library
@@ -176,23 +197,32 @@ across versions. Later pages use the explicit parameter.
 hustoj_client/
 ├── _http.py      # urllib wrapper, jar handling, HTML-to-text
 ├── parsing.py    # contest list, problem links, statement parsing
-├── checker.py    # fetch + diff against state, report building
+├── checker.py    # fetch + diff against state, report rendering
 ├── config.py     # config load/save + the config CLI
 └── __main__.py   # `python -m hustoj_client check`
+examples/
+├── config.example.json   # configuration template (all placeholders)
+└── demo_parse.py         # offline demo; produces docs/demo.png
 tools/
 └── make_vs_solution.py   # generate a VS solution, one project per problem
 tests/
-└── test_parsing.py       # 19 offline tests, no network needed
+├── fixtures/             # sample HUSTOJ markup
+└── test_parsing.py       # offline tests, no network needed
 ```
 
 ## Tests
 
 The suite is fully offline: network failure paths are asserted rather than
-mocked, so it runs anywhere.
+mocked, so it runs anywhere without a judge to talk to. The tests cover HTML
+parsing, the entity-encoding edge cases, teacher resolution, secret masking, all
+three report formats, and the `include_known` behaviour behind `--only-new`.
 
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+CI runs the same suite on Linux and Windows across Python 3.8 / 3.11 / 3.13 — see
+[`.github/workflows/tests.yml`](.github/workflows/tests.yml).
 
 ## Companion tool: one Visual Studio project per problem
 
@@ -228,11 +258,15 @@ server-rendered online judge is structured. It only ever *reads* from the judge.
 If you use it, follow your institution's rules and do not use it to submit work
 that is not yours.
 
-## Screenshots
+## Reproducing the screenshot
 
-<!-- Add 2-3 screenshots here. A repository with a screenshot gets far more
-     attention than one without. Suggestion:
+The image above is not a mock-up; it is the real output of a committed script:
 
-     ![CLI scan output](docs/cli.png)
+```bash
+python examples/demo_parse.py
+```
 
-     Put files under docs/ and reference them relatively. -->
+It parses [`tests/fixtures/contest_list.html`](tests/fixtures/contest_list.html) and
+[`tests/fixtures/problem.html`](tests/fixtures/problem.html), which reproduce the
+markup a Bootstrap-based HUSTOJ theme emits. That is also how to inspect a parsing
+change without pointing the client at a live judge.

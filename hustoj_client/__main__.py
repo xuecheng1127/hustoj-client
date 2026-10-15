@@ -20,9 +20,11 @@ def main(argv=None):
     p_check.add_argument("--config", default=CONFIG_FILENAME, help="config path")
     p_check.add_argument("--state", default=None,
                          help="state file; omit to run without persisting anything")
-    p_check.add_argument("--report", default="text", choices=["text", "json"])
+    p_check.add_argument("--report", default="text", choices=["text", "json", "markdown"])
     p_check.add_argument("--teacher", default=None, help="override the teacher filter")
     p_check.add_argument("--timeout", type=int, default=None, help="per-request timeout")
+    p_check.add_argument("--only-new", action="store_true",
+                         help="omit the list of already-seen assignments from the report")
     p_check.add_argument("--json-out", default=None, help="also write the report to this file")
 
     sub.add_parser("config", help="read or edit the configuration", add_help=False)
@@ -51,8 +53,10 @@ def main(argv=None):
         if state_path is None and getattr(args, "command", None) == "check":
             state_path = cfg.get("state_file")
 
-        report = build_report(cfg, state_path=state_path, timeout=timeout)
-        print_report(report, getattr(args, "report", "text"))
+        report = build_report(cfg, state_path=state_path, timeout=timeout,
+                              include_known=not getattr(args, "only_new", False))
+        print_report(report, getattr(args, "report", "text"),
+                     base_url=cfg.get("base_url", ""))
 
         out = getattr(args, "json_out", None)
         if out:

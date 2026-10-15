@@ -1,0 +1,39 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: python ${{ matrix.python-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.8", "3.11", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # The package has no third-party dependencies, so there is nothing to
+      # install. Byte-compiling first catches syntax errors independently of
+      # the test run itself.
+      - name: Byte-compile
+        run: python -m compileall -q hustoj_client tools tests
+
+      - name: Run the offline test suite
+        run: python -m unittest discover -s tests -v
+
+      - name: Run the offline demo
+        run: python examples/demo_parse.py

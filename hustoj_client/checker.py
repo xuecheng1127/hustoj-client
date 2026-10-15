@@ -95,7 +95,7 @@ def resolve_teachers(cfg):
     return teachers or [DEFAULT_TEACHER]
 
 
-def build_report(cfg, state_path=None, timeout=25):
+def build_report(cfg, state_path=None, timeout=25, include_known=True):
     """Check the judge for newly published assignments.
 
     Args:
@@ -103,6 +103,9 @@ def build_report(cfg, state_path=None, timeout=25):
         state_path: Where to persist the seen-contest map. Written only when
             given; pass None for a completely read-only dry run.
         timeout: Per-request socket timeout.
+        include_known: When False, the "known" list of already-seen assignments is
+            omitted from the report. Useful for scheduled runs whose only job is to
+            report what is new, and for keeping machine-readable output small.
 
     Returns:
         A report dict with checked_at, teachers, total_found, new_count, new
@@ -142,7 +145,7 @@ def build_report(cfg, state_path=None, timeout=25):
         "total_found": len(matched),
         "new_count": len(new_contests),
         "new": [],
-        "known": [c for c in matched if c["cid"] in seen],
+        "known": [c for c in matched if c["cid"] in seen] if include_known else [],
     }
 
     for c in new_contests:
@@ -180,46 +183,136 @@ def build_report(cfg, state_path=None, timeout=25):
 REPORT_SECTIONS = ["Description", "Input", "Output", "Sample Input", "Sample Output"]
 
 
-def print_report(report, fmt="text"):
-    """Print a report produced by :func:`build_report` as text or JSON."""
-    if fmt == "json":
-        print(json.dumps(report, ensure_ascii=False, indent=2))
-        return
-
-    print("[OJ] %s  teacher: %s" % (report["checked_at"], report["teacher"]))
-    print("%d matching assignment(s), %d new.\n"
-          % (report["total_found"], report["new_count"]))
+def render_text(report):
+    """Render a report as the human-readable plain-text form."""
+    out = []
+    out.append("[OJ] %s  teacher: %s" % (report["checked_at"], report["teacher"]))
+    out.append("%d matching assignment(s), %d new." % (report["total_found"], report["new_count"]))
 
     if report["new_count"] == 0:
-        print("No new assignments.\n")
-        if report["known"]:
-            print("Already seen:")
+        out.append("No new assignments.")
+        if report.get("known"):
+            out.append("")
+            out.append("Already seen:")
             for k in report["known"]:
-                print("  - cid=%s %s [%s]" % (k["cid"], k["title"], k["status"]))
-        return
+                out.append("  - cid=%s %s [%s]" % (k["cid"], k["title"], k["status"]))
+        return "\n".join(out) + "\n"
 
     for idx, item in enumerate(report["new"], 1):
         c = item["contest"]
-        print("#%d new assignment" % idx)
-        print("  cid      : %s" % c["cid"])
-        print("  title    : %s" % c["title"])
-        print("  status   : %s" % c["status"])
-        print("  private  : %s   creator: %s" % (c["private"], c["creator"]))
+        out.append("")
+        out.append("#%d new assignment" % idx)
+        out.append("  cid      : %s" % c["cid"])
+        out.append("  title    : %s" % c["title"])
+        out.append("  status   : %s" % c["status"])
+        out.append("  private  : %s   creator: %s" % (c["private"], c["creator"]))
         if "error" in item:
-            print("  [problem fetch failed: %s]" % item["error"])
+            out.append("  [problem fetch failed: %s]" % item["error"])
+            out.append("")
+            out.append("=" * 60)
             continue
-        print("  problems : %s" % item.get("problem_count", len(item["problems"])))
+        out.append("  problems : %s" % item.get("problem_count", len(item["problems"])))
         for p in item["problems"]:
             info = p["info"]
-            print("\n  [Problem %s] %s" % (info.get("label") or "?", p["title"]))
-            print("  limits: %s / %s"
-                  % (info.get("time_limit") or "?", info.get("memory_limit") or "?"))
+            out.append("")
+            out.append("  [Problem %s] %s" % (info.get("label") or "?", p["title"]))
+            out.append("  limits: %s / %s"
+                       % (info.get("time_limit") or "?", info.get("memory_limit") or "?"))
             if info.get("url"):
-                print("  url   : %s" % info["url"])
+                out.append("  url   : %s" % info["url"])
             for sec_name in REPORT_SECTIONS:
                 sec = info.get("sections", {}).get(sec_name)
                 if sec:
-                    print("\n  --- %s ---" % sec_name)
+                    out.append("")
+                    out.append("  --- %s ---" % sec_name)
                     for line in sec.splitlines():
-                        print("  " + line)
-        print("\n" + "=" * 60 + "\n")
+                        out.append("  " + line)
+        out.append("")
+        out.append("=" * 60)
+    return "\n".join(out) + "\n"
+
+
+def render_markdown(report, base_url=""):
+    """Render a report as Markdown, for issue templates, reports or documentation.
+
+    Args:
+        report: A report produced by :func:`build_report`.
+        base_url: Judge root URL used to build clickable links when the report
+            entries do not already carry absolute URLs.
+    """
+    base_url = (base_url or "").rstrip("/")
+    lines = []
+    lines.append("# OJ assignment report")
+    lines.append("")
+    lines.append("- Checked at: %s" % report["checked_at"])
+    lines.append("- Teacher filter: %s" % report["teacher"])
+    lines.append("- Matching assignments: %d" % report["total_found"])
+    lines.append("- New assignments: **%d**" % report["new_count"])
+    lines.append("")
+
+    if report["new_count"] == 0:
+        lines.append("No new assignments.")
+        if report.get("known"):
+            lines.append("")
+            lines.append("## Already seen")
+            lines.append("")
+            for k in report["known"]:
+                link = "[%s]" % k["title"]
+                if base_url:
+                    link = "[%s](%s/contest.php?cid=%s)" % (k["title"], base_url, k["cid"])
+                lines.append("- cid `%s` %s (%s)" % (k["cid"], link, k["status"]))
+        return "\n".join(lines) + "\n"
+
+    for item in report["new"]:
+        c = item["contest"]
+        lines.append("## New: %s" % c["title"])
+        lines.append("")
+        if base_url:
+            lines.append("- Contest: [contest.php?cid=%s](%s/contest.php?cid=%s)"
+                         % (c["cid"], base_url, c["cid"]))
+        else:
+            lines.append("- Contest cid: `%s`" % c["cid"])
+        lines.append("- Status: %s   Visibility: %s   Creator: %s"
+                     % (c["status"], c["private"], c["creator"]))
+        if "error" in item:
+            lines.append("- Problem fetch failed: %s" % item["error"])
+            lines.append("")
+            continue
+        lines.append("- Problems: %s" % item.get("problem_count", len(item["problems"])))
+        lines.append("")
+        for p in item["problems"]:
+            info = p["info"]
+            label = info.get("label") or "?"
+            lines.append("### Problem %s: %s" % (label, p["title"]))
+            lines.append("")
+            limits = "%s / %s" % (info.get("time_limit") or "?", info.get("memory_limit") or "?")
+            lines.append("Time / memory: %s" % limits)
+            if info.get("url"):
+                lines.append("")
+                lines.append("<%s>" % info["url"])
+            for sec_name in REPORT_SECTIONS:
+                sec = info.get("sections", {}).get(sec_name)
+                if not sec:
+                    continue
+                lines.append("")
+                lines.append("**%s**" % sec_name)
+                lines.append("")
+                lines.append("```")
+                lines.extend(sec.splitlines())
+                lines.append("```")
+            lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def format_report(report, fmt="text", base_url=""):
+    """Render a report in the requested format and return it as a string."""
+    if fmt == "json":
+        return json.dumps(report, ensure_ascii=False, indent=2) + "\n"
+    if fmt == "markdown":
+        return render_markdown(report, base_url=base_url)
+    return render_text(report)
+
+
+def print_report(report, fmt="text", base_url=""):
+    """Print a report produced by :func:`build_report` as text, JSON or Markdown."""
+    sys.stdout.write(format_report(report, fmt, base_url=base_url))

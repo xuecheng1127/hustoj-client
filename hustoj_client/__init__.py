@@ -25,7 +25,10 @@ from .checker import (
     enter_contest,
     fetch_contest_list,
     fetch_problem,
+    format_report,
     print_report,
+    render_markdown,
+    render_text,
 )
 
 __version__ = "0.1.0"
@@ -46,5 +49,8 @@ __all__ = [
     "fetch_contest_list",
     "fetch_problem",
     "print_report",
+    "format_report",
+    "render_markdown",
+    "render_text",
     "__version__",
 ]
