@@ -1,0 +1,11 @@
+{
+  "_note": "Copy to config.json and fill in your own values. Never commit config.json.",
+  "base_url": "http://<your-oj-host, e.g. http://oj.example.edu.cn>",
+  "teachers": ["<teacher-name>"],
+  "teacher_filter": "<teacher-name>",
+  "contest_password": "<password for entering the private contest, if any>",
+  "max_pages": 3,
+  "fetch_problems": true,
+  "request_timeout": 25,
+  "state_file": "state.json"
+}

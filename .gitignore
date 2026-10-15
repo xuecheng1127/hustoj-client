@@ -1,0 +1,29 @@
+# ---- Personal data: NEVER commit these ----
+config.json
+state.json
+session.txt
+*.problems.json
+vcode.gif
+report.json
+检测报告*.txt
+检测日志.txt
+
+# ---- Local problem / test material ----
+code/
+tests/fixtures/real/
+*.in
+*.expected
+*.actual
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+
+# ---- PyInstaller ----
+*.spec
